@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>เช็คอินเข้างาน</title>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Helvetica Neue", "Segoe UI", "Noto Sans Thai", sans-serif;
+    background: #f4f6f8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .card {
+    background: #fff;
+    border-radius: 20px;
+    padding: 32px 24px;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    text-align: center;
+  }
+  .avatar {
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin: 0 auto 16px;
+    display: block;
+    border: 3px solid #06c755;
+  }
+  .name {
+    font-size: 20px;
+    font-weight: 700;
+    color: #222;
+    margin-bottom: 4px;
+  }
+  .clock {
+    font-size: 15px;
+    color: #888;
+    margin-bottom: 28px;
+  }
+  .btn {
+    width: 100%;
+    padding: 20px;
+    font-size: 20px;
+    font-weight: 700;
+    border: none;
+    border-radius: 14px;
+    margin-bottom: 14px;
+    cursor: pointer;
+    transition: transform 0.1s;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-in {
+    background: #06c755;
+    color: white;
+  }
+  .btn-out {
+    background: #ff5252;
+    color: white;
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .status {
+    margin-top: 20px;
+    padding: 14px;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    display: none;
+  }
+  .status.show { display: block; }
+  .status.success {
+    background: #e6f9ee;
+    color: #06c755;
+  }
+  .status.error {
+    background: #ffeaea;
+    color: #ff5252;
+  }
+  .loading {
+    font-size: 16px;
+    color: #888;
+    padding: 40px 0;
+  }
+  .icon {
+    font-size: 26px;
+    margin-right: 6px;
+  }
+</style>
+</head>
+<body>
+
+<div class="card" id="card">
+  <div class="loading" id="loading">กำลังโหลด...</div>
+
+  <div id="content" style="display:none;">
+    <img id="avatar" class="avatar" src="" alt="">
+    <div class="name" id="userName">-</div>
+    <div class="clock" id="clockNow">-</div>
+
+    <button class="btn btn-in" id="btnIn" onclick="submitCheck('เข้างาน')">
+      <span class="icon">✅</span>เข้างาน
+    </button>
+    <button class="btn btn-out" id="btnOut" onclick="submitCheck('เลิกงาน')">
+      <span class="icon">🏠</span>เลิกงาน
+    </button>
+
+    <div class="status" id="status"></div>
+  </div>
+</div>
+
+<script>
+  // ===== แก้ไข 2 บรรทัดนี้ก่อนใช้งาน =====
+  const LIFF_ID = 'ใส่ LIFF_ID_ของคุณตรงนี้';         // ได้จาก LINE Developers Console
+  const SCRIPT_URL = 'ใส่ Web_App_URL_ของ_Apps_Script_ตรงนี้'; // ได้จากตอน Deploy Apps Script
+  // ==========================================
+
+  let userProfile = null;
+
+  function updateClock() {
+    const now = new Date();
+    document.getElementById('clockNow').innerText =
+      now.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' }) +
+      ' • ' + now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  async function initLiff() {
+    try {
+      await liff.init({ liffId: LIFF_ID });
+
+      if (!liff.isLoggedIn()) {
+        liff.login();
+        return;
+      }
+
+      userProfile = await liff.getProfile();
+
+      document.getElementById('avatar').src = userProfile.pictureUrl || '';
+      document.getElementById('userName').innerText = userProfile.displayName;
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('content').style.display = 'block';
+
+      updateClock();
+      setInterval(updateClock, 30000);
+
+    } catch (err) {
+      document.getElementById('loading').innerText = 'เกิดข้อผิดพลาด: ' + err.message;
+    }
+  }
+
+  async function submitCheck(type) {
+    const btnIn = document.getElementById('btnIn');
+    const btnOut = document.getElementById('btnOut');
+    const status = document.getElementById('status');
+
+    btnIn.disabled = true;
+    btnOut.disabled = true;
+    status.className = 'status show';
+    status.style.background = '#f0f0f0';
+    status.style.color = '#666';
+    status.innerText = 'กำลังบันทึก...';
+
+    try {
+      await fetch(SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors', // Apps Script Web App ต้องใช้ no-cors จาก client ฝั่งนี้
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({
+          name: userProfile.displayName,
+          userId: userProfile.userId,
+          type: type
+        })
+      });
+
+      status.className = 'status show success';
+      status.innerHTML = (type === 'เข้างาน' ? '✅ บันทึก "เข้างาน" แล้ว' : '🏠 บันทึก "เลิกงาน" แล้ว');
+
+    } catch (err) {
+      status.className = 'status show error';
+      status.innerText = '❌ บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง';
+    }
+
+    setTimeout(() => {
+      btnIn.disabled = false;
+      btnOut.disabled = false;
+    }, 3000);
+  }
+
+  initLiff();
+</script>
+
+</body>
+</html>
