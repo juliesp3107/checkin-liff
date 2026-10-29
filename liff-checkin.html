@@ -119,9 +119,9 @@
 </div>
 
 <script>
-  // ===== แก้ไข 2 บรรทัดนี้ก่อนใช้งาน =====
+  // ===== แก้ไข 2 บรรทัดนี้ก่อนใช้งาน (SCRIPT_URL: ใส่ URL ใหม่หลัง Deploy จากบัญชีเจ้าของไฟล์) =====
   const LIFF_ID = '2011149776-Et5Ms9nb';         // ได้จาก LINE Developers Console
-  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz-OlGPfyqZYVh-DukkqzThpTHCL0wzbsZWkgJlGU1OBCGHd6VFsOqyebB6sddnFGoLmA/exec'; // ได้จากตอน Deploy Apps Script
+  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxKyaAyx8R0ty9NOjsC2sxUljXxxI_0ETCkfliXZGXLK5bPaDtU8TxLQFryS91yUP83kA/exec'; // ได้จากตอน Deploy Apps Script
   // ==========================================
 
   let userProfile = null;
@@ -170,23 +170,38 @@
     status.innerText = 'กำลังบันทึก...';
 
     try {
-      await fetch(SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors', // Apps Script Web App ต้องใช้ no-cors จาก client ฝั่งนี้
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({
-          name: userProfile.displayName,
-          userId: userProfile.userId,
-          type: type
-        })
-      });
+      // อ่านผลตอบกลับจริงจากเซิร์ฟเวอร์ (ไม่ใช้ no-cors) เพื่อไม่ให้ขึ้น "สำเร็จ" ทั้งที่บันทึกไม่เข้า
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 25000);
+      let res;
+      try {
+        res = await fetch(SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            name: userProfile.displayName,
+            userId: userProfile.userId,
+            type: type
+          }),
+          signal: ctrl.signal
+        });
+      } finally {
+        clearTimeout(timer);
+      }
 
-      status.className = 'status show success';
-      status.innerHTML = (type === 'เข้างาน' ? '✅ บันทึก "เข้างาน" แล้ว' : '🏠 บันทึก "เลิกงาน" แล้ว');
+      const data = await res.json();
+      if (data && data.result === 'success') {
+        status.className = 'status show success';
+        status.innerHTML = (type === 'เข้างาน' ? '✅ บันทึก "เข้างาน" แล้ว' : '🏠 บันทึก "เลิกงาน" แล้ว');
+      } else {
+        status.className = 'status show error';
+        status.innerText = '❌ บันทึกไม่สำเร็จ (' + ((data && data.message) || 'ไม่ทราบสาเหตุ') + ') กรุณาแจ้งหัวหน้า';
+      }
 
     } catch (err) {
+      // ส่งไปแล้วแต่ยืนยันผลไม่ได้ (เน็ตหลุด/หมดเวลา) อย่ากดซ้ำทันที เพราะอาจบันทึกไปแล้ว
       status.className = 'status show error';
-      status.innerText = '❌ บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง';
+      status.innerText = '⚠️ ยืนยันผลไม่ได้ (' + (err && err.name === 'AbortError' ? 'หมดเวลา' : 'เชื่อมต่อไม่ได้') + ') กรุณาแจ้งหัวหน้าให้ตรวจว่าบันทึกเข้าหรือไม่ ก่อนกดซ้ำ';
     }
 
     setTimeout(() => {
